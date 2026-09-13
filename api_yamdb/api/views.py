@@ -43,6 +43,7 @@ class CreateListDestoyViewSet(
 ):
     pass
 
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def signup(request):
@@ -152,7 +153,9 @@ class ReviewViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         title = self.get_title()
 
-        if Review.objects.filter(title=title, author=self.request.user).exists():
+        if Review.objects.filter(
+            title=title, author=self.request.user
+        ).exists():
             raise ValidationError('Вы уже оставили отзыв на это произведение.')
         serializer.save(author=self.request.user, title=title)
 
