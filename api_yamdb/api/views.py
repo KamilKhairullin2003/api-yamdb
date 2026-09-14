@@ -9,7 +9,6 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import (
     AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
 )
@@ -17,20 +16,20 @@ from rest_framework.response import Response
 
 from rest_framework_simplejwt.tokens import AccessToken
 
-from reviews.models import Category, Genre, Review, Title
-from .filters import TitleFilter
-from .permissions import (
+from api.filters import TitleFilter
+from api.permissions import (
     IsAdmin,
     IsAdminOrReadOnly,
     IsAuthorModeratorAdminOrReadOnly
 )
-from .serializers import (
+from api.serializers import (
     CategorySerializer, CommentSerializer,
     GenreSerializer, ReviewSerializer,
     SignUpSerializer, TitleReadSerializer,
     TitleWriteSerializer, TokenSerializer,
     UserSerializer
 )
+from reviews.models import Category, Genre, Review, Title
 
 User = get_user_model()
 
@@ -41,7 +40,10 @@ class CreateListDestoyViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet
 ):
-    pass
+    permission_classes = (IsAdminOrReadOnly,)
+    filter_backends = (filters.SearchFilter,)
+    search_fields = ('name',)
+    lookup_field = 'slug'
 
 
 @api_view(['POST'])
@@ -51,23 +53,7 @@ def signup(request):
 
     serializer = SignUpSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-
-    email = serializer.validated_data.get('email')
-    username = serializer.validated_data.get('username')
-
-    try:
-        user, created = User.objects.get_or_create(
-            username=username,
-            email=email
-        )
-    except Exception:
-        return Response(
-            {
-                'error': 'Пользователь с таким email '
-                         'или username уже существует'
-            },
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    user = serializer.save()
 
     confirmation_code = default_token_generator.make_token(user)
 
@@ -89,18 +75,10 @@ def get_token(request):
     serializer.is_valid(raise_exception=True)
 
     username = serializer.validated_data.get('username')
-    confirmation_code = serializer.validated_data.get('confirmation_code')
-
     user = get_object_or_404(User, username=username)
+    token = AccessToken.for_user(user)
 
-    if default_token_generator.check_token(user, confirmation_code):
-        token = AccessToken.for_user(user)
-        return Response({'token': str(token)}, status=status.HTTP_200_OK)
-
-    return Response(
-        {'confirmation_code': 'Неверный код подтвеждения'},
-        status=status.HTTP_400_BAD_REQUEST
-    )
+    return Response({'token': str(token)}, status=status.HTTP_200_OK)
 
 
 class TitleViewSet(viewsets.ModelViewSet):
@@ -121,19 +99,11 @@ class TitleViewSet(viewsets.ModelViewSet):
 class CategoryViewSet(CreateListDestoyViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    permission_classes = (IsAdminOrReadOnly,)
-    filter_backends = (filters.SearchFilter,)
-    search_fields = ('name',)
-    lookup_field = 'slug'
 
 
 class GenreViewSet(CreateListDestoyViewSet):
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
-    permission_classes = (IsAdminOrReadOnly,)
-    filter_backends = (filters.SearchFilter,)
-    search_fields = ('name',)
-    lookup_field = 'slug'
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
@@ -151,13 +121,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
         return self.get_title().reviews.all()
 
     def perform_create(self, serializer):
-        title = self.get_title()
-
-        if Review.objects.filter(
-            title=title, author=self.request.user
-        ).exists():
-            raise ValidationError('Вы уже оставили отзыв на это произведение.')
-        serializer.save(author=self.request.user, title=title)
+        serializer.save(author=self.request.user, title=self.get_title())
 
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -169,7 +133,11 @@ class CommentViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete']
 
     def get_review(self):
-        return get_object_or_404(Review, pk=self.kwargs.get('review_id'))
+        return get_object_or_404(
+            Review,
+            pk=self.kwargs.get('review_id'),
+            title_id=self.kwargs.get('title_id')
+        )
 
     def get_queryset(self):
         return self.get_review().comments.all()

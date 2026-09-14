@@ -1,0 +1,8 @@
+MAIL_LENGTH = 254
+USERNAME_LENGTH = 150
+REGEX = r'^[\w.@+-]+\Z'
+ME = 'me'
+NAME_LENGTH = 256
+MIN = 1
+MAX = 10
+TEXT_MAX = 15

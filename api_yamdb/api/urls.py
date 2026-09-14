@@ -16,7 +16,7 @@ router.register('titles', TitleViewSet, basename='titles')
 router.register(
     r'titles/(?P<title_id>\d+)/reviews',
     ReviewViewSet,
-    basename='reivews'
+    basename='reviews'
 )
 router.register(
     r'titles/(?P<title_id>\d+)/reviews/(?P<review_id>\d+)/comments',
@@ -29,7 +29,11 @@ auth_urls = [
     path('token/', get_token, name='token'),
 ]
 
+v1_urls = [
+    path('', include(router.urls)),
+    path('auth/', include(auth_urls)),
+]
+
 urlpatterns = [
-    path('v1/', include(router.urls)),
-    path('v1/auth/', include(auth_urls)),
+    path('v1/', include(v1_urls)),
 ]
